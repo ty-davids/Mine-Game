@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/png" href="favicon.png">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mine Game</title>
+  <title>Casino Games</title>
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -168,7 +169,7 @@
 <body>
   <div class="container">
     <div class="game-panel">
-      <h1>Mines Game with Balance</h1>
+      <h1>CASINO MINES</h1>
       <div class="controls">
         <label>Mines: <input type="number" id="mineCount" min="1" max="24" value="3"></label>
         <label>Bet: R<input type="number" id="betAmount" min="1" value="10"></label>
@@ -267,6 +268,7 @@
 
     function endRound(win=false, winnings=0, multiplier=1) {
       gameOver = true;
+       revealAllMines();
       if(win){
         showPopup(`🎉 You won! Amount: ${formatCurrency(winnings)}, Multiplier: ${multiplier.toFixed(2)}x`);
         addBetHistory('win', bet, winnings, multiplier);
@@ -342,6 +344,15 @@
     function maxBet() {
       document.getElementById('betAmount').value = balance;
     }
+    
+    function revealAllMines() {
+  tiles.forEach((tile, idx) => {
+    if (tile === "mine") {
+      revealed[idx] = true;
+    }
+  });
+  renderGrid();
+}
 
     document.getElementById('startBtn').addEventListener('click', startGame);
     document.getElementById('cashBtn').addEventListener('click', cashOut);
