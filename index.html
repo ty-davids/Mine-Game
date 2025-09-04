@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mines Game with Balance</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+      background-image: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      position: relative;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .game-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(50px, 12vw));
+      gap: 5px;
+      margin-top: 20px;
+      width: max-content;
+    }
+    .tile {
+      width: 100%;
+      padding-top: 100%;
+      background: #222;
+      border: 2px solid #444;
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transform: scale(1);
+      transition: all 0.3s ease;
+      touch-action: manipulation;
+    }
+    .tile div {
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 5vw;
+      user-select: none;
+    }
+    .tile.revealed {
+      animation: pop 0.3s ease forwards;
+    }
+    .tile.revealed.mine {
+      animation: mineFlash 0.6s ease forwards;
+    }
+    .tile.revealed.safe {
+      animation: safeFlash 0.6s ease forwards;
+    }
+    @keyframes pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes mineFlash {
+      0%, 100% { box-shadow: 0 0 10px #e74c3c; }
+      50% { box-shadow: 0 0 25px #ff0000; }
+    }
+    @keyframes safeFlash {
+      0%, 100% { box-shadow: 0 0 10px #2ecc71; }
+      50% { box-shadow: 0 0 25px #27ae60; }
+    }
+    #multiplier, .balance {
+      transition: transform 0.3s ease, color 0.3s ease;
+    }
+    .update-highlight {
+      transform: scale(1.2);
+      color: #f1c40f;
+    }
+    .tile:hover {
+      background: #555;
+      transform: scale(1.05);
+    }
+    .controls {
+      margin: 15px;
+    }
+    .cheat {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #f39c12;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .balance {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+    input, button {
+      padding: 10px 15px;
+      font-size: 16px;
+      border-radius: 8px;
+    }
+    .popup {
+      position: fixed;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0,0,0,0.85);
+      color: #fff;
+      padding: 20px 30px;
+      border-radius: 12px;
+      font-size: 18px;
+      z-index: 1000;
+      display: none;
+    }
+    .control-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .history-panel {
+      background: rgba(0,0,0,0.6);
+      padding: 15px;
+      border-radius: 12px;
+      color: #fff;
+      width: 220px;
+      max-height: 500px;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .history-panel h2 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .history-panel ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .history-panel li {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+      .history-panel {
+        width: 90%;
+        max-height: 200px;
+        margin-top: 20px;
+      }
+      .tile div {
+        font-size: 8vw;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="game-panel">
+      <h1>Mines Game with Balance</h1>
+      <div class="controls">
+        <label>Mines: <input type="number" id="mineCount" min="1" max="24" value="3"></label>
+        <label>Bet: R<input type="number" id="betAmount" min="1" value="10"></label>
+        <div class="control-buttons">
+          <button id="maxBetBtn">Max Bet</button>
+          <button id="startBtn">Start Round</button>
+          <button id="cashBtn">Cash Out</button>
+        </div>
+      </div>
+      <div id="multiplier">Multiplier: 1x</div>
+      <div class="balance">Balance: R<span id="balanceValue">100</span></div>
+      <div class="grid" id="grid"></div>
+      <div class="cheat" id="cheatBtn">Toggle Cheat Mode</div>
+      <div class="popup" id="popup"></div>
+    </div>
+    <div class="history-panel">
+      <h2>Bet History</h2>
+      <ul id="betHistory"></ul>
+    </div>
+  </div>
+
+  <script>
+    let gridSize = 5;
+    let mines = 3;
+    let tiles = [];
+    let revealed = [];
+    let safeClicks = 0;
+    let gameOver = true;
+    let cheatMode = false;
+    let balance = 100;
+    let bet = 10;
+
+    const popup = document.getElementById('popup');
+
+    function formatCurrency(amount) {
+      return 'R' + amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function showPopup(message) {
+      popup.textContent = message;
+      popup.style.display = 'block';
+      setTimeout(() => { popup.style.display = 'none'; }, 2000);
+    }
+
+    function startGame() {
+      mines = parseInt(document.getElementById("mineCount").value) || 3;
+      bet = parseInt(document.getElementById("betAmount").value) || 10;
+      if(bet > balance){ showPopup('Bet cannot exceed balance!'); return; }
+
+      tiles = Array(gridSize * gridSize).fill("safe");
+      revealed = Array(gridSize * gridSize).fill(false);
+      safeClicks = 0;
+      gameOver = false;
+
+      let minePositions = [];
+      while (minePositions.length < mines) {
+        let pos = Math.floor(Math.random() * (gridSize * gridSize));
+        if (!minePositions.includes(pos)) minePositions.push(pos);
+      }
+      minePositions.forEach(pos => tiles[pos] = "mine");
+
+      renderGrid();
+      updateMultiplier();
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById("grid");
+      grid.innerHTML = "";
+      tiles.forEach((tile, idx) => {
+        const div = document.createElement("div");
+        div.classList.add("tile");
+        const innerDiv = document.createElement("div");
+        if (revealed[idx]) {
+          div.classList.add("revealed", tile);
+          innerDiv.textContent = tile === "safe" ? "💎" : "💣";
+        } else if (cheatMode && tile === "mine") {
+          div.style.background = "#c0392b";
+        }
+        div.appendChild(innerDiv);
+        div.addEventListener('click', () => pickTile(idx));
+        div.addEventListener('touchstart', () => pickTile(idx)); // mobile tap
+        grid.appendChild(div);
+      });
+    }
+
+    function addBetHistory(outcome, betAmount, winnings=0, multiplier=1) {
+      const history = document.getElementById('betHistory');
+      const li = document.createElement('li');
+      if (outcome === 'win') {
+        li.textContent = `✅ Bet: ${formatCurrency(betAmount)}, Won: ${formatCurrency(winnings)}, x${multiplier.toFixed(2)}`;
+      } else {
+        li.textContent = `❌ Bet: ${formatCurrency(betAmount)}, Lost: ${formatCurrency(betAmount)}`;
+      }
+      history.prepend(li);
+    }
+
+    function endRound(win=false, winnings=0, multiplier=1) {
+      gameOver = true;
+      if(win){
+        showPopup(`🎉 You won! Amount: ${formatCurrency(winnings)}, Multiplier: ${multiplier.toFixed(2)}x`);
+        addBetHistory('win', bet, winnings, multiplier);
+      } else {
+        showPopup(`💥 You lost! Lost ${formatCurrency(bet)}`);
+        addBetHistory('loss', bet);
+      }
+    }
+
+    function pickTile(idx) {
+      if (gameOver) { showPopup('Click "Start Round" to begin!'); return; }
+      if (revealed[idx]) return;
+
+      revealed[idx] = true;
+
+      if (tiles[idx] === "mine") {
+        balance -= bet;
+        updateBalance();
+        renderGrid();
+        endRound(false);
+      } else {
+        safeClicks++;
+        updateMultiplier();
+        renderGrid();
+
+        const totalSafe = gridSize * gridSize - mines;
+        if (safeClicks === totalSafe) {
+          let multiplier = Math.pow(gridSize * gridSize / totalSafe, safeClicks);
+          let winnings = Math.round(bet * multiplier);
+          balance += winnings;
+          updateBalance();
+          endRound(true, winnings, multiplier);
+        }
+      }
+    }
+
+    function updateMultiplier() {
+      let total = gridSize * gridSize;
+      let safe = total - mines;
+      if (safe <= 0) {
+        document.getElementById("multiplier").textContent = 'Multiplier: 0x';
+        return;
+      }
+      let multiplier = Math.pow(total / safe, safeClicks);
+      const multEl = document.getElementById("multiplier");
+      multEl.textContent = `Multiplier: ${multiplier.toFixed(2)}x`;
+      multEl.classList.add('update-highlight');
+      setTimeout(() => multEl.classList.remove('update-highlight'), 300);
+    }
+
+    function cashOut() {
+      if (gameOver) { showPopup('Click "Start Round" to begin!'); return; }
+      let multiplierText = document.getElementById("multiplier").textContent;
+      let multiplier = parseFloat(multiplierText.replace('Multiplier: ', '').replace('x',''));
+      let winnings = Math.round(bet * multiplier);
+      balance += winnings;
+      updateBalance();
+      endRound(true, winnings, multiplier);
+    }
+
+    function updateBalance() {
+      const balEl = document.getElementById('balanceValue');
+      balEl.textContent = balance.toLocaleString('en-ZA');
+      balEl.classList.add('update-highlight');
+      setTimeout(() => balEl.classList.remove('update-highlight'), 300);
+    }
+
+    function toggleCheat() {
+      cheatMode = !cheatMode;
+      renderGrid();
+    }
+
+    function maxBet() {
+      document.getElementById('betAmount').value = balance;
+    }
+
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('cashBtn').addEventListener('click', cashOut);
+    document.getElementById('cheatBtn').addEventListener('click', toggleCheat);
+    document.getElementById('maxBetBtn').addEventListener('click', maxBet);
+
+    updateBalance();
+  </script>
+</body>
+</html>
+
